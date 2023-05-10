@@ -6,8 +6,8 @@
 
 #define n_threads 8
 
-int filter_lock(volatile int* level, volatile int* victim, int tid) {
-    volatile int wait;
+void filter_lock(volatile int* level, volatile int* victim, int tid) {
+    //volatile int wait;
     for (int j=1; j<n_threads; j++) {
         level[tid] = j;
         victim[j] = tid;
@@ -16,7 +16,27 @@ int filter_lock(volatile int* level, volatile int* victim, int tid) {
             while (level[k]>=j && victim[j]==tid) {}; // works
         }
     }
-    return wait;
+    //return wait;
+}
+
+int sum_val(volatile int* values, int size) {
+    int sum = 0;
+    for (int i=0; i<size; i++) {sum+=values[i];}
+    return sum;
+}
+
+void block_woo_lock(volatile int* competing, volatile int* victim, int tid) {
+    int j=0;
+    competing[tid] = 1;
+    do {
+        j++;
+        victim[j] = tid;
+        while (victim[j]==tid && j<sum_val(competing, n_threads)) {};
+    } while (victim[j] != tid);
+}
+
+void block_woo_unlock(volatile int* competing, int tid) {
+    competing[tid] = 0;
 }
 
 void unlock(volatile int* level, int tid) {
@@ -42,12 +62,12 @@ double std_dev(double* values, int size) {
 }
 
 int main (int argc, char** argv) {
-    volatile int level[n_threads], victim[n_threads];
-    int lock_log[n_threads]; // stores order of access into CS by thread_ID
+    volatile int level[n_threads], victim[n_threads], competing[n_threads];
+    int lock_log[n_threads]; // stores order of access into CSQ[i]  by thread_ID
     int tid, index;
     index = 0;
 
-    int shots = 1000;
+    int shots = 1;
     double timings[shots];
     double timing_avg = 0;
 
@@ -58,22 +78,23 @@ int main (int argc, char** argv) {
 
 for (int s=0; s<shots; s++) {
     index = 0;
-    #pragma omp parallel private(tid) shared(level, victim, lock_log, index)
+    #pragma omp parallel private(tid) shared(level, victim, competing, lock_log, index)
     {
         tid = omp_get_thread_num();
 
         start = omp_get_wtime();
         //omp_set_lock(&baseline);
-        filter_lock(level, victim, tid);
+        //filter_lock(level, victim, tid);
+        block_woo_lock(competing, victim, tid);
 
         // Critical section //////////
-        #pragma omp critical
         lock_log[index] = tid;
         index += 1;
         //////////////////////////////
 
         //omp_unset_lock(&baseline);
-        unlock(level, tid);
+        //unlock(level, tid);
+        block_woo_unlock(competing, tid);
         stop = omp_get_wtime();
     }
     timings[s] = ((double)stop-start);

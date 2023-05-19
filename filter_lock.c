@@ -4,7 +4,7 @@
 #include <math.h>
 #include <omp.h>
 
-#define n_threads 4
+#define n_threads 8
 
 void filter_lock(volatile int *level, volatile int *victim, int tid)
 {
@@ -84,25 +84,41 @@ int alag_lock(volatile int *level, volatile int *competing, volatile int *victim
     return j;
 }
 
-void alag_unlock(volatile int *competing, volatile int *level,volatile int *victim, int tid, int j)
+void alag_unlock(volatile int *competing, volatile int *level, volatile int *victim, int tid, int j)
 {
     for (int k = 1; k < j; k++)
+    {
+        victim[j] = tid;
+    }
+    for (int k = 0; k < n_threads; k++)
+    {
+        if (k == tid)
+            continue;
+        while (!(level[k] == 0 || victim[level[k]] == k))
         {
-            victim[j] = tid;
-        }
-        for (int k = 0; k < n_threads; k++)
-        {
-            if (k == tid)
-                continue;
-            while (!(level[k]==0 || victim[level[k]]==k))
-            {
-            };
-        }
-    level[tid]=0;
+        };
+    }
+    level[tid] = 0;
     competing[tid] = 0;
-
 }
 
+// void peterson_lock(volatile int *flag, volatile int *victim, int tid, int level)
+void peterson_lock(int tid, int level)
+{
+    int i = floor(tid / pow(2, level));    // tid has to be computed level wise
+    int j = i + (i + 1) % 2 - i % 2;       // competitor
+    int i_flag = i + (pow(2, level) - 1) / pow(2, level) * 2*n_threads;
+    int j_flag = i_flag + (i + 1) % 2 - i % 2;
+    int ij_victim =  floor(i/2)+(pow(2, level) - 1) / pow(2, level) *  n_threads; // works
+
+    printf("tid: %d level: %d\n", tid, level);
+    printf("i: %d j: %d \n", i, j);
+    printf("i_flag: %d j_flag: %d ij_victim: %d \n", i_flag, j_flag, ij_victim);
+}
+
+// void peterson_binary(volatile int *flag, volatile int *victim, int tid, int n_threads)
+// {
+// }
 
 double avg_val(double *values, int size)
 {
@@ -152,20 +168,22 @@ int main(int argc, char **argv)
             tid = omp_get_thread_num();
 
             start = omp_get_wtime();
-            // omp_set_lock(&baseline);
+            omp_set_lock(&baseline);
             // filter_lock(level, victim_filter, tid);
-            //block_woo_lock(competing, victim_woo, tid);
-            int level_tid=alag_lock(level,competing, victim_woo,tid);
+            // block_woo_lock(competing, victim_woo, tid);
+            //int level_tid = alag_lock(level, competing, victim_woo, tid);
 
             // Critical section //////////
+            for (int lvl=0; lvl<3; lvl++){peterson_lock(tid, lvl);};
+            printf("\n");
             lock_log[index] = tid;
             index += 1;
             //////////////////////////////
 
-            // omp_unset_lock(&baseline);
+            omp_unset_lock(&baseline);
             // filter_unlock(level, tid);
             // block_woo_unlock(competing, tid);
-            alag_unlock(competing,level, victim_woo,tid, level_tid);
+            //alag_unlock(competing, level, victim_woo, tid, level_tid);
             stop = omp_get_wtime();
         }
         timings[s] = ((double)stop - start);

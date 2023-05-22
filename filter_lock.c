@@ -186,9 +186,8 @@ int main(int argc, char **argv)
 
     int shots = 1;
     double timings[shots];
+    double timing_tid[n_threads]; 
     double timing_avg = 0;
-
-    double start, stop;
 
     omp_lock_t baseline;
     omp_init_lock(&baseline);
@@ -198,9 +197,7 @@ int main(int argc, char **argv)
         assert(232 > n_threads && "unint8_t OVERFLOW");
         // BASELINES RUN
         index = 0;
-        memset(lock_log, 0, sizeof(lock_log)); 
-        //memset(flag_peterson, 0, sizeof(flag_peterson));
-        //memset(victim_peterson, 231, sizeof(victim_peterson));
+        memset(lock_log, 0, sizeof(lock_log));
 
         volatile int_type level[n_threads] = {0};
         volatile int_type victim_filter[n_threads] = {231};
@@ -208,23 +205,16 @@ int main(int argc, char **argv)
         volatile int_type competing[n_threads] = {0};
         volatile int_type victim_peterson[flag_size] = {231};
         volatile int_type flag_peterson[flag_size] = {0};
-        
-        //memset(victim_woo, 231, sizeof(victim_woo));
-        //memset(victim_filter, 231, sizeof(victim_filter));
-        //memset(competing, 0, sizeof(competing));
 
-        #pragma omp parallel private(tid) shared(level, victim_filter, victim_woo, flag_peterson, victim_peterson, competing, lock_log, index)
+        #pragma omp parallel private(tid) shared(level, victim_filter, victim_woo, flag_peterson, victim_peterson, competing, lock_log, index, timing_tid)
         {
+            double start, stop;
             tid = omp_get_thread_num();
             #pragma omp barrier
             #pragma omp barrier
-            if (tid==0)
-            {
-                start = omp_get_wtime();
-            }
-            #pragma omp barrier
-            #pragma omp barrier
-            //omp_set_lock(&baseline);
+            start = omp_get_wtime();
+
+            // omp_set_lock(&baseline);
             // filter_lock(level, victim_filter, tid);
             // block_woo_lock(competing, victim_woo, tid);
             // int_type level_tid = alag_lock(level, competing, victim_woo, tid);
@@ -238,19 +228,20 @@ int main(int argc, char **argv)
 
             //omp_unset_lock(&baseline);
             peterson_release(flag_peterson, tid);
-            // filter_unlock(level, tid);
-            //block_woo_unlock(competing, tid);
+            //filter_unlock(level, tid);
+            // block_woo_unlock(competing, tid);
             //alag_unlock(competing, level, victim_woo, tid, level_tid);
-            #pragma omp barrier
-            #pragma omp barrier
-            if (tid==0)
-            {
-                stop = omp_get_wtime();
-            }
+
+            stop = omp_get_wtime();
+            timing_tid[tid]= stop-start;
             #pragma omp barrier
             #pragma omp barrier
         }
-        timings[s] = ((double)stop - start);
+        double max_runtime=0;
+        for (int c = 0; c < n_threads; c++)
+            if (timing_tid[c] > max_runtime) {max_runtime = timing_tid[c];}
+
+        timings[s] = max_runtime;
     }
     omp_destroy_lock(&baseline);
 

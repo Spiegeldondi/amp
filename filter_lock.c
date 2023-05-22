@@ -174,8 +174,15 @@ double std_dev(double *values, int_type size)
     return sqrt(sum_sq_diff / size);
 }
 
+void reset_arr(volatile int_type* array, int_type value, int size)
+{
+    for (int i=0; i < size; i++) array[i] = value;
+}
+
 int main(int argc, char **argv)
 {
+    assert(232 > n_threads && "unint8_t OVERFLOW");
+
     volatile int_type level[n_threads], victim_filter[n_threads], victim_woo[n_threads];
     volatile int_type victim_peterson[flag_size], flag_peterson[flag_size];
 
@@ -192,24 +199,37 @@ int main(int argc, char **argv)
     omp_lock_t baseline;
     omp_init_lock(&baseline);
 
-    for (int_type s = 0; s < shots; s++)
+    #pragma omp parallel private(tid) shared(level, victim_filter, victim_woo, flag_peterson, victim_peterson, competing, lock_log, index, timing_tid, timings)
     {
-        assert(232 > n_threads && "unint8_t OVERFLOW");
-        // BASELINES RUN
-        index = 0;
-        memset(lock_log, 0, sizeof(lock_log));
+        tid = omp_get_thread_num();
+        #pragma omp barrier
+        #pragma omp barrier
 
-        volatile int_type level[n_threads] = {0};
-        volatile int_type victim_filter[n_threads] = {231};
-        volatile int_type victim_woo[n_threads] = {231};
-        volatile int_type competing[n_threads] = {0};
-        volatile int_type victim_peterson[flag_size] = {231};
-        volatile int_type flag_peterson[flag_size] = {0};
+        for (int_type s = 0; s < shots; s++)
+        {     
+            #pragma omp single 
+            {
+                memset(lock_log, 0, sizeof(lock_log));
+                index = 0;
 
-        #pragma omp parallel private(tid) shared(level, victim_filter, victim_woo, flag_peterson, victim_peterson, competing, lock_log, index, timing_tid)
-        {
+                reset_arr(level,0,n_threads);
+                reset_arr(competing,0,n_threads);
+                reset_arr(flag_peterson,0,flag_size);
+                reset_arr(victim_filter,231,n_threads);
+                reset_arr(victim_woo,231,n_threads);
+                reset_arr(victim_peterson,231,flag_size);
+
+                // volatile int_type level[n_threads] = {0};
+                // volatile int_type victim_filter[n_threads] = {231};
+                // volatile int_type victim_woo[n_threads] = {231};
+                // volatile int_type competing[n_threads] = {0};
+                // volatile int_type victim_peterson[flag_size] = {231};
+                // volatile int_type flag_peterson[flag_size] = {0};
+            }
+            #pragma omp barrier
+            #pragma omp barrier
+
             double start, stop;
-            tid = omp_get_thread_num();
             #pragma omp barrier
             #pragma omp barrier
             start = omp_get_wtime();
@@ -221,7 +241,7 @@ int main(int argc, char **argv)
             peterson_binary(flag_peterson,victim_peterson,tid);
 
             // Critical section //////////
-          
+        
             lock_log[index] = tid;
             index += 1;
             //////////////////////////////
@@ -234,15 +254,20 @@ int main(int argc, char **argv)
 
             stop = omp_get_wtime();
             timing_tid[tid]= stop-start;
-            #pragma omp barrier
-            #pragma omp barrier
-        }
-        double max_runtime=0;
-        for (int c = 0; c < n_threads; c++)
-            if (timing_tid[c] > max_runtime) {max_runtime = timing_tid[c];}
 
-        timings[s] = max_runtime;
+            #pragma omp barrier
+            #pragma omp barrier
+
+            #pragma omp single
+            {
+                double max_runtime=0;
+                for (int c = 0; c < n_threads; c++)
+                    if (timing_tid[c] > max_runtime) {max_runtime = timing_tid[c];}
+                timings[s] = max_runtime;
+            }
+        }
     }
+
     omp_destroy_lock(&baseline);
 
     // check for correctness

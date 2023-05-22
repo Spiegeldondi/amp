@@ -4,8 +4,8 @@
 #include <math.h>
 #include <omp.h>
 
-#define n_threads 2
-#define flag_soze 64
+#define n_threads 8
+#define flag_size 64
 
 void filter_lock(volatile int *level, volatile int *victim, int tid)
 {
@@ -111,11 +111,11 @@ void peterson_lock(volatile int *flag, volatile int *victim, int tid, int level)
     int j_flag = i_flag + (i + 1) % 2 - i % 2;
     int ij_victim =  floor(i/2)+(pow(2, level) - 1) / pow(2, level) *  n_threads; // works
 
-    // printf("tid: %d level: %d\n", tid, level);
-    // printf("i: %d j: %d \n", i, j);
-    // printf("i_flag: %d j_flag: %d ij_victim: %d \n", i_flag, j_flag, ij_victim);
+    //printf("tid: %d level: %d\n", tid, level);
+    //printf("i: %d j: %d \n", i, j);
+    //printf("i_flag: %d j_flag: %d ij_victim: %d \n", i_flag, j_flag, ij_victim);
 
-    flag[i_flag] =1;
+    flag[i_flag] = 1;
     victim[ij_victim] = i;
     while (flag[j_flag] && victim[ij_victim] == i) {};
 }
@@ -131,8 +131,10 @@ void peterson_unlock(volatile int *flag, int tid, int level)
 void peterson_binary(volatile int *flag, volatile int *victim, int tid)
 {
     int levels = log2(n_threads);
+    //printf("tid: %d in level: %d", tid, levels);
     for (int level=0; level<levels; level++)
     {
+        //printf("tid: %d in level: %d", tid, level);
         peterson_lock(flag, victim, tid, level);
     }
 }
@@ -171,7 +173,7 @@ double std_dev(double *values, int size)
 int main(int argc, char **argv)
 {
     volatile int level[n_threads], victim_filter[n_threads], victim_woo[n_threads];
-    volatile int victim_peterson[64], flag_peterson[64];
+    volatile int victim_peterson[flag_size], flag_peterson[flag_size];
 
     volatile int competing[n_threads] = {0}; // need to set array to zero for sum_val to work
     int lock_log[n_threads];                 // stores order of access into CSQ[i]  by thread_ID
@@ -191,12 +193,12 @@ int main(int argc, char **argv)
     {
         // BASELINES RUN
         index = 0;
-#pragma omp parallel private(tid) shared(level, victim_filter, victim_woo, competing, lock_log, index)
+#pragma omp parallel private(tid) shared(level, victim_filter, victim_woo, flag_peterson, victim_peterson, competing, lock_log, index)
         {
             tid = omp_get_thread_num();
 
             start = omp_get_wtime();
-            omp_set_lock(&baseline);
+            // omp_set_lock(&baseline);
             // filter_lock(level, victim_filter, tid);
             // block_woo_lock(competing, victim_woo, tid);
             // int level_tid = alag_lock(level, competing, victim_woo, tid);

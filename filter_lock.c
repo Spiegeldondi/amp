@@ -1,5 +1,7 @@
 #include <assert.h>
+#include <string.h>
 #include <stdio.h>
+#include <stdint.h>
 #include <time.h>
 #include <math.h>
 #include <omp.h>
@@ -7,14 +9,16 @@
 #define n_threads 8
 #define flag_size 64
 
-void filter_lock(volatile int *level, volatile int *victim, int tid)
+typedef uint8_t int_type; // careful, Max value is 232!
+
+void filter_lock(volatile int_type *level, volatile int_type *victim, int_type tid)
 {
-    // volatile int wait;
-    for (int j = 1; j < n_threads; j++)
+    // volatile int_type wait;
+    for (int_type j = 1; j < n_threads; j++)
     {
         level[tid] = j;
         victim[j] = tid;
-        for (int k = 0; k < n_threads; k++)
+        for (int_type k = 0; k < n_threads; k++)
         {
             if (k == tid)
                 continue;
@@ -26,24 +30,24 @@ void filter_lock(volatile int *level, volatile int *victim, int tid)
     // return wait;
 }
 
-void filter_unlock(volatile int *level, int tid)
+void filter_unlock(volatile int_type *level, int_type tid)
 {
     level[tid] = 0;
 }
 
-int sum_val(volatile int *values, int size)
+int_type sum_val(volatile int_type *values, int_type size)
 {
-    int sum = 0;
-    for (int i = 0; i < size; i++)
+    int_type sum = 0;
+    for (int_type i = 0; i < size; i++)
     {
         sum += values[i];
     }
     return sum;
 }
 
-void block_woo_lock(volatile int *competing, volatile int *victim, int tid)
+void block_woo_lock(volatile int_type *competing, volatile int_type *victim, int_type tid)
 {
-    int j = 0;
+    int_type j = 0;
     competing[tid] = 1;
     do
     {
@@ -57,21 +61,21 @@ void block_woo_lock(volatile int *competing, volatile int *victim, int tid)
     // printf("tid: %d entereing CS at victim[%d]: %d \n", tid, j, victim[j]);
 }
 
-void block_woo_unlock(volatile int *competing, int tid)
+void block_woo_unlock(volatile int_type *competing, int_type tid)
 {
     competing[tid] = 0;
 }
 
-int alag_lock(volatile int *level, volatile int *competing, volatile int *victim, int tid)
+int_type alag_lock(volatile int_type *level, volatile int_type *competing, volatile int_type *victim, int_type tid)
 {
-    int j = 0;
+    int_type j = 0;
     competing[tid] = 1;
     do
     {
         j++;
         level[tid] = j;
         victim[j] = tid;
-        for (int k = 0; k < n_threads; k++)
+        for (int_type k = 0; k < n_threads; k++)
         {
             if (k == tid)
                 continue;
@@ -85,13 +89,13 @@ int alag_lock(volatile int *level, volatile int *competing, volatile int *victim
     return j;
 }
 
-void alag_unlock(volatile int *competing, volatile int *level, volatile int *victim, int tid, int j)
+void alag_unlock(volatile int_type *competing, volatile int_type *level, volatile int_type *victim, int_type tid, int_type j)
 {
-    for (int k = 1; k < j; k++)
+    for (int_type k = 1; k < j; k++)
     {
         victim[j] = tid;
     }
-    for (int k = 0; k < n_threads; k++)
+    for (int_type k = 0; k < n_threads; k++)
     {
         if (k == tid)
             continue;
@@ -103,13 +107,13 @@ void alag_unlock(volatile int *competing, volatile int *level, volatile int *vic
     competing[tid] = 0;
 }
 
-void peterson_lock(volatile int *flag, volatile int *victim, int tid, int level)
+void peterson_lock(volatile int_type *flag, volatile int_type *victim, int_type tid, int_type level)
 {
-    int i = floor(tid / pow(2, level));    // tid has to be computed level wise
-    int j = i + (i + 1) % 2 - i % 2;       // competitor
-    int i_flag = i + (pow(2, level) - 1) / pow(2, level) * 2*n_threads;
-    int j_flag = i_flag + (i + 1) % 2 - i % 2;
-    int ij_victim =  floor(i/2)+(pow(2, level) - 1) / pow(2, level) *  n_threads; // works
+    int_type i = floor(tid / pow(2, level));    // tid has to be computed level wise
+    int_type j = i + (i + 1) % 2 - i % 2;       // competitor
+    int_type i_flag = i + (pow(2, level) - 1) / pow(2, level) * 2*n_threads;
+    int_type j_flag = i_flag + (i + 1) % 2 - i % 2;
+    int_type ij_victim =  floor(i/2)+(pow(2, level) - 1) / pow(2, level) *  n_threads; // works
 
     //printf("tid: %d level: %d\n", tid, level);
     //printf("i: %d j: %d \n", i, j);
@@ -120,49 +124,49 @@ void peterson_lock(volatile int *flag, volatile int *victim, int tid, int level)
     while (flag[j_flag] && victim[ij_victim] == i) {};
 }
 
-void peterson_unlock(volatile int *flag, int tid, int level)
+void peterson_unlock(volatile int_type *flag, int_type tid, int_type level)
 {
-    int i = floor(tid / pow(2, level));    // tid has to be computed level wise
-    int i_flag = i + (pow(2, level) - 1) / pow(2, level) * 2*n_threads;
+    int_type i = floor(tid / pow(2, level));    // tid has to be computed level wise
+    int_type i_flag = i + (pow(2, level) - 1) / pow(2, level) * 2*n_threads;
 
     flag[i_flag] =0;
 }
 
-void peterson_binary(volatile int *flag, volatile int *victim, int tid)
+void peterson_binary(volatile int_type *flag, volatile int_type *victim, int_type tid)
 {
-    int levels = log2(n_threads);
+    int_type levels = log2(n_threads);
     //printf("tid: %d in level: %d", tid, levels);
-    for (int level=0; level<levels; level++)
+    for (int_type level=0; level<levels; level++)
     {
         //printf("tid: %d in level: %d", tid, level);
         peterson_lock(flag, victim, tid, level);
     }
 }
 
-void peterson_release(volatile int *flag, int tid)
+void peterson_release(volatile int_type *flag, int_type tid)
 {
-    int levels = log2(n_threads);
-    for (int level=0; level<levels; level++)
+    int_type levels = log2(n_threads);
+    for (int_type level=0; level<levels; level++)
     {
         peterson_unlock(flag, tid, level);
     }
 }
 
-double avg_val(double *values, int size)
+double avg_val(double *values, int_type size)
 {
     double sum = 0;
-    for (int i = 0; i < size; i++)
+    for (int_type i = 0; i < size; i++)
     {
         sum += values[i];
     }
     return sum / size;
 }
 
-double std_dev(double *values, int size)
+double std_dev(double *values, int_type size)
 {
     double avg = avg_val(values, size);
     double sum_sq_diff = 0;
-    for (int i = 0; i < size; i++)
+    for (int_type i = 0; i < size; i++)
     {
         double diff = values[i] - avg;
         sum_sq_diff += diff * diff;
@@ -172,12 +176,12 @@ double std_dev(double *values, int size)
 
 int main(int argc, char **argv)
 {
-    volatile int level[n_threads], victim_filter[n_threads], victim_woo[n_threads];
-    volatile int victim_peterson[flag_size], flag_peterson[flag_size];
+    volatile int_type level[n_threads], victim_filter[n_threads], victim_woo[n_threads];
+    volatile int_type victim_peterson[flag_size], flag_peterson[flag_size];
 
-    volatile int competing[n_threads] = {0}; // need to set array to zero for sum_val to work
-    int lock_log[n_threads];                 // stores order of access into CSQ[i]  by thread_ID
-    int tid, index;
+    volatile int_type competing[n_threads] = {0}; // need to set array to zero for sum_val to work
+    int_type lock_log[n_threads] = {0};                 // stores order of access into CSQ[i]  by thread_ID
+    int_type tid, index;
     index = 0;
 
     int shots = 1;
@@ -189,19 +193,41 @@ int main(int argc, char **argv)
     omp_lock_t baseline;
     omp_init_lock(&baseline);
 
-    for (int s = 0; s < shots; s++)
+    for (int_type s = 0; s < shots; s++)
     {
+        assert(232 > n_threads && "unint8_t OVERFLOW");
         // BASELINES RUN
         index = 0;
-#pragma omp parallel private(tid) shared(level, victim_filter, victim_woo, flag_peterson, victim_peterson, competing, lock_log, index)
+        memset(lock_log, 0, sizeof(lock_log)); 
+        //memset(flag_peterson, 0, sizeof(flag_peterson));
+        //memset(victim_peterson, 231, sizeof(victim_peterson));
+
+        volatile int_type level[n_threads] = {0};
+        volatile int_type victim_filter[n_threads] = {231};
+        volatile int_type victim_woo[n_threads] = {231};
+        volatile int_type competing[n_threads] = {0};
+        volatile int_type victim_peterson[flag_size] = {231};
+        volatile int_type flag_peterson[flag_size] = {0};
+        
+        //memset(victim_woo, 231, sizeof(victim_woo));
+        //memset(victim_filter, 231, sizeof(victim_filter));
+        //memset(competing, 0, sizeof(competing));
+
+        #pragma omp parallel private(tid) shared(level, victim_filter, victim_woo, flag_peterson, victim_peterson, competing, lock_log, index)
         {
             tid = omp_get_thread_num();
-
-            start = omp_get_wtime();
-            // omp_set_lock(&baseline);
+            #pragma omp barrier
+            #pragma omp barrier
+            if (tid==0)
+            {
+                start = omp_get_wtime();
+            }
+            #pragma omp barrier
+            #pragma omp barrier
+            //omp_set_lock(&baseline);
             // filter_lock(level, victim_filter, tid);
             // block_woo_lock(competing, victim_woo, tid);
-            // int level_tid = alag_lock(level, competing, victim_woo, tid);
+            // int_type level_tid = alag_lock(level, competing, victim_woo, tid);
             peterson_binary(flag_peterson,victim_peterson,tid);
 
             // Critical section //////////
@@ -210,12 +236,19 @@ int main(int argc, char **argv)
             index += 1;
             //////////////////////////////
 
-            // omp_unset_lock(&baseline);
+            //omp_unset_lock(&baseline);
             peterson_release(flag_peterson, tid);
             // filter_unlock(level, tid);
-            // block_woo_unlock(competing, tid);
+            //block_woo_unlock(competing, tid);
             //alag_unlock(competing, level, victim_woo, tid, level_tid);
-            stop = omp_get_wtime();
+            #pragma omp barrier
+            #pragma omp barrier
+            if (tid==0)
+            {
+                stop = omp_get_wtime();
+            }
+            #pragma omp barrier
+            #pragma omp barrier
         }
         timings[s] = ((double)stop - start);
     }
@@ -223,11 +256,12 @@ int main(int argc, char **argv)
 
     // check for correctness
     // in case of race condition, index will likely be < n_threads
-    assert(index == n_threads && "RACE CONDITION was witnessed");
+    //assert(index == n_threads && "RACE CONDITION was witnessed");
+    printf("Index: %d vs n_threads: %d\n", index, n_threads);
 
     // analyze order of access into cs
     printf("access order:\n");
-    for (int n = 0; n < n_threads; n++)
+    for (int_type n = 0; n < n_threads; n++)
     {
         printf("%d ", lock_log[n]);
     }

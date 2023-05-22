@@ -6,8 +6,9 @@
 #include <math.h>
 #include <omp.h>
 #include <stdatomic.h>
+#include <unistd.h>
 
-#define n_threads 8
+#define n_threads 4
 #define flag_size 64
 
 typedef atomic_int int_type; // careful, Max value is 232!
@@ -132,6 +133,7 @@ void peterson_unlock(int_type *flag, int_type tid, int_type level)
 
 void peterson_binary(int_type *flag, int_type *victim, int_type tid)
 {
+    assert(log2(n_threads) == round(log2(n_threads)) && "n_threads does not suffice requirement: n_threads == 2**n");
     int_type levels = log2(n_threads);
     //printf("tid: %d in level: %d", tid, levels);
     for (int_type level=0; level<levels; level++)
@@ -167,7 +169,7 @@ int main(int argc, char **argv)
     int index;
     index = 0;
 
-    int shots = 10000;
+    int shots = 1000;
     double timings[shots];
     double timing_tid[n_threads]; 
     double timing_avg = 0;
@@ -175,7 +177,7 @@ int main(int argc, char **argv)
     omp_lock_t baseline;
     omp_init_lock(&baseline);
 
-    #pragma omp parallel private(tid) shared(level, victim, competing, lock_log, index, timing_tid, timings, shots)
+    #pragma omp parallel private(tid) shared(level, victim, competing, victim_peterson, flag_peterson, lock_log, index, timing_tid, timings, shots)
     {
         #pragma omp single
         printf("Number of threads: %d, brought to you by %d\n", omp_get_num_threads(), omp_get_thread_num());
@@ -209,7 +211,7 @@ int main(int argc, char **argv)
             //omp_set_lock(&baseline);
             //filter_lock(level, victim, tid);
             //block_woo_lock(competing, victim, tid);
-            peterson_binary(flag_peterson,victim_peterson,tid);
+            peterson_binary(flag_peterson, victim_peterson,tid);
 
             // Critical section //////////
             lock_log[index] = tid;
@@ -220,6 +222,30 @@ int main(int argc, char **argv)
             //filter_unlock(level, tid);
             //block_woo_unlock(competing, tid);
             peterson_release(flag_peterson, tid);
+            #pragma omp barrier
+            #pragma omp barrier
+            #pragma omp critical 
+            {
+                if (index != n_threads) {
+                    printf("THREAD: %d\n",tid);
+                    printf("_______________________________________________________________________\n");
+                    int_type levels = log2(n_threads);
+                    //printf("tid: %d in level: %d", tid, levels);
+                    for (int_type level=0; level<levels; level++)
+                    {
+                        int_type i = floor(tid / pow(2, level));    // tid has to be computed level wise
+                        int_type j = i + (i + 1) % 2 - i % 2;       // competitor
+                        int_type i_flag = i + (pow(2, level) - 1) / pow(2, level) * 2*n_threads;
+                        int_type j_flag = i_flag + (i + 1) % 2 - i % 2;
+                        int_type ij_victim =  floor(i/2)+(pow(2, level) - 1) / pow(2, level) *  n_threads; // works
+
+                        printf("level: %d\n",level);
+                        printf("i: %d j: %d \n", i, j);
+                        printf("i_flag: %d j_flag: %d ij_victim: %d \n", i_flag, j_flag, ij_victim);
+                    }
+                    printf("_______________________________________________________________________\n");
+                }
+            }
 
             stop = omp_get_wtime();
             timing_tid[tid]= stop-start;
@@ -227,9 +253,11 @@ int main(int argc, char **argv)
             #pragma omp barrier
             #pragma omp barrier
 
+            
             #pragma omp single
             {
                 assert(index == n_threads && "RACE CONDITION was witnessed");
+
                 double max_runtime=0;
                 /*
                 for (int c = 0; c < n_threads; c++)
@@ -237,6 +265,7 @@ int main(int argc, char **argv)
                 timings[s] = max_runtime;
                 */
             }
+
         }
     }
 

@@ -11,6 +11,7 @@
 #define n_threads 8
 #define flag_size 64
 #define inner_iterations 100
+#define outer_iterations 10
 
 typedef atomic_int int_type; // careful, Max value is 232!
 // typedef int int_type; // careful, Max value is 232!
@@ -157,143 +158,145 @@ void peterson_release(int_type *flag, int_type tid)
 int main(int argc, char **argv)
 {
     assert(232 > n_threads && "unint8_t OVERFLOW");
+    printf("n_threads %d\n", n_threads);
+    // printf("iteration runtime: %f\n", iteration_runtime);
+    printf("iterations %d x %d\n", outer_iterations,inner_iterations);
 
-    int_type level[n_threads] = {0};
-    int_type competing[n_threads] = {0};
-    int_type victim[n_threads] = {231};
-
-    int_type victim_peterson[flag_size] = {231}, flag_peterson[flag_size] = {0};
-
-    int_type lock_log[inner_iterations] = {231}; // stores order of access into CSQ[i]  by thread_ID
-    int_type tid;
-    int index = 0;
-    int th_index = 0;
-
-    double iteration_start;
-    double max_times[n_threads];
-    double min_times[n_threads];
-    double avg_times[n_threads];
-    int_type th_indices[n_threads];
-
-    omp_lock_t baseline;
-    omp_init_lock(&baseline);
-
-#pragma omp parallel private(tid, th_index) shared(iteration_start, level, victim, competing, victim_peterson, flag_peterson, lock_log, index, max_times, min_times, avg_times, th_indices)
+    for (int j = 0; j < outer_iterations; j++)
     {
-        tid = omp_get_thread_num();
-        double max_time = 0.0;
-        double avg_time = 0.0;
-        double min_time = 10 * 1e6;
+        int_type level[n_threads] = {0};
+        int_type competing[n_threads] = {0};
+        int_type victim[n_threads] = {231};
 
-#pragma omp single
+        int_type victim_peterson[flag_size] = {231}, flag_peterson[flag_size] = {0};
+
+        int_type lock_log[inner_iterations] = {231}; // stores order of access into CSQ[i]  by thread_ID
+        int_type tid;
+        int index = 0;
+        int th_index = 0; // WHY DOESNT THIS DO ANYTHING
+
+        double iteration_start;
+        double max_times[n_threads];
+        double min_times[n_threads];
+        double avg_times[n_threads];
+        int_type th_indices[n_threads];
+
+        omp_lock_t baseline;
+        omp_init_lock(&baseline);
+
+        #pragma omp parallel private(tid, th_index) shared(iteration_start, level, victim, competing, victim_peterson, flag_peterson, lock_log, index, max_times, min_times, avg_times, th_indices)
+        
         {
-            printf("number of threads: %d\n", omp_get_num_threads());
-            // printf("iteration runtime: %f\n", iteration_runtime);
-            printf("inner_iterations: %d\n", inner_iterations);
+            assert(omp_get_num_threads() == n_threads && "set n_threads correctly");
+            tid = omp_get_thread_num();
+            double max_time = 0.0;
+            double avg_time = 0.0;
+            double min_time = 10 * 1e6;
 
-            reset_arr(level, 0, n_threads);
-            reset_arr(competing, 0, n_threads);
-            reset_arr(victim, 231, n_threads);
+            #pragma omp single
+            {
+                reset_arr(level, 0, n_threads);
+                reset_arr(competing, 0, n_threads);
+                reset_arr(victim, 231, n_threads);
 
-            reset_arr(flag_peterson, 0, flag_size);
-            reset_arr(victim_peterson, 231, flag_size);
+                reset_arr(flag_peterson, 0, flag_size);
+                reset_arr(victim_peterson, 231, flag_size);
 
-            iteration_start = omp_get_wtime();
+                iteration_start = omp_get_wtime();
+            }
+
+            th_index = 0; // does only take effect here, not outside the parallel region
+            #pragma omp barrier
+            #pragma omp barrier
+
+            // while ((omp_get_wtime()-iteration_start) < iteration_runtime)
+            // for (int_type s = 0; s < shots; s++)
+            while (index < (inner_iterations - n_threads))
+            {
+                // #pragma omp barrier // NECESSARY??
+                // #pragma omp barrier // NECESSARY??
+
+                double time_1 = omp_get_wtime();
+
+                // omp_set_lock(&baseline);
+                filter_lock(level, victim, tid);
+                // block_woo_lock(competing, victim, tid);
+                // peterson_binary(flag_peterson, victim_peterson, tid);
+
+                //////////////////////////////
+                // Critical section //////////
+
+                double time_2 = omp_get_wtime();
+                double time_dif = (time_2 - time_1) * 1e6; // micro seconds
+                avg_time += time_dif;
+
+                if (time_dif > max_time)
+                    max_time = time_dif;
+                if (time_dif < min_time)
+                    min_time = time_dif;
+
+                lock_log[index] = tid;
+
+                index += 1;
+                th_index += 1;
+
+                //////////////////////////////
+                //////////////////////////////
+
+                // omp_unset_lock(&baseline);
+                filter_unlock(level, tid);
+                // block_woo_unlock(competing, tid);
+                // peterson_release(flag_peterson, tid);
+            }
+
+            // COLLECT DATA
+            #pragma omp barrier
+            #pragma omp barrier
+
+            min_times[tid] = min_time;
+            max_times[tid] = max_time;
+            avg_times[tid] = avg_time / th_index;
+            th_indices[tid] = th_index;
+
+            /////////////////////////////////////
+            // STATISTICS
+            /////////////////////////////////////
+            #pragma omp barrier
+            #pragma omp barrier
+
+            #pragma omp single
+            {
+                int_type real_index = sum_val(th_indices, n_threads);
+                assert(index == real_index && "RACE CONDITION was witnessed");
+                /*
+
+                tID ----- th_indices --------- min_times -------- ...
+                0   --       30        --       0.34       --
+                ------------------------------------------------
+                1   --       20        --       0.20       --
+                ------------------------------------------------
+                ...   --                --                  --
+                ------------------------------------------------
+                7   --       50        --       0.66       --
+
+                */
+
+                // printf("\ntid acquisitions min_time max_time avg_time\n");
+                // for (int i = 0; i < n_threads; i++)
+                //     printf("%d %d %f %f %f\n", i, th_indices[i], min_times[i], max_times[i], avg_times[i]);
+
+                /*
+
+                0 3 2 1 2 1 1 1 3 0 ....
+
+                */
+
+                for (int i = 0; i < inner_iterations; i++)
+                    printf("%d ", lock_log[i]);
+                printf("\n");
+            }
         }
-
-#pragma omp barrier
-#pragma omp barrier
-
-        // while ((omp_get_wtime()-iteration_start) < iteration_runtime)
-        // for (int_type s = 0; s < shots; s++)
-        while (index < (inner_iterations - n_threads))
-        {
-            // #pragma omp barrier // NECESSARY??
-            // #pragma omp barrier // NECESSARY??
-
-            double time_1 = omp_get_wtime();
-
-            // omp_set_lock(&baseline);
-            // filter_lock(level, victim, tid);
-            // block_woo_lock(competing, victim, tid);
-            peterson_binary(flag_peterson, victim_peterson, tid);
-
-            //////////////////////////////
-            // Critical section //////////
-
-            double time_2 = omp_get_wtime();
-            double time_dif = (time_2 - time_1) * 1e6; // micro seconds
-            avg_time += time_dif;
-
-            if (time_dif > max_time)
-                max_time = time_dif;
-            if (time_dif < min_time)
-                min_time = time_dif;
-
-            lock_log[index] = tid;
-
-            index += 1;
-            th_index += 1;
-
-            //////////////////////////////
-            //////////////////////////////
-
-            // omp_unset_lock(&baseline);
-            // filter_unlock(level, tid);
-            // block_woo_unlock(competing, tid);
-            peterson_release(flag_peterson, tid);
-        }
-
-// COLLECT DATA
-#pragma omp barrier
-#pragma omp barrier
-
-        min_times[tid] = min_time;
-        max_times[tid] = max_time;
-        avg_times[tid] = avg_time / th_index;
-        th_indices[tid] = th_index;
-
-/////////////////////////////////////
-// STATISTICS
-/////////////////////////////////////
-#pragma omp barrier
-#pragma omp barrier
-
-#pragma omp single
-        {
-            double real_index = sum_val(th_indices, n_threads);
-            assert(index == real_index && "RACE CONDITION was witnessed");
-            // assert(index == shots*n_threads && "RACE CONDITION was witnessed");
-            /*
-
-            tID ----- th_indices --------- min_times -------- ...
-            0   --       30        --       0.34       --
-            ------------------------------------------------
-            1   --       20        --       0.20       --
-            ------------------------------------------------
-            ...   --                --                  --
-            ------------------------------------------------
-            7   --       50        --       0.66       --
-
-            */
-
-            printf("\ntid acquisitions min_time max_time avg_time\n");
-            for (int i = 0; i < n_threads; i++)
-                printf("%d %d %f %f %f\n", i, th_indices[i], min_times[i], max_times[i], avg_times[i]);
-
-            /*
-
-            0 3 2 1 2 1 1 1 3 0 ....
-
-            */
-
-            printf("\nlock_log:\n");
-            for (int i = 0; i < inner_iterations; i++)
-                printf("%d ", lock_log[i]);
-            printf("\n");
-        }
+        omp_destroy_lock(&baseline);
     }
-
-    omp_destroy_lock(&baseline);
     return 0;
 }

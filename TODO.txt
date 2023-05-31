@@ -1,0 +1,23 @@
+TODO
+_________________________________________________________________
+* Latency benchmark 
+-> run certain number of CS-iterations (barrierless) and take time of whole process -> total time by iterations
+
+* Throughput benchmark
+-> run while loop for e.g. 0.5 seconds and count total number of CS attained 
+* A. algo reparieren
+
+* convert postprocessing .ipynb to .py
+* makefile / README
+
+FROM SLIDES:
+_________________________________________________________________
+* 'verify that the the claimed
+bounds on overtaking are not violated'
+* 'Ensure that memory (register)
+updates become visible in required order! Explain what happens if
+not.'
+* 'report averages with confidence intervals': ist das doch boxplot erfüllt?
+_________________________________________________________________
+* nebula
+* report

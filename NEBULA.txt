@@ -1,0 +1,18 @@
+nebula commands
+::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::::
+
+ssh nebula
+exit
+
+cat outout.txt
+
+vim omp_test.c 
+i, change stuff, ESC, :wq
+
+export OMP_NUM_THREADS=8
+gcc -fopenmp -o omp_test omp_test.c
+srun -p q_student --time=1:00 -N 1 -c 1 ./omp_test
+./run -> output/filterlock_8_run
+
+scp lock_filter_bench.c nebula:/home/student/amp23s20/
+scp -r nebula:/home/student/amp23s20/output output_nebula/

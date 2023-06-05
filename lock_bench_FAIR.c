@@ -1,6 +1,7 @@
 #include <assert.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdint.h>
 #include <time.h>
 #include <math.h>
@@ -8,6 +9,7 @@
 #include <stdatomic.h>
 #include <unistd.h>
 
+// set number of threads as 
 #define n_threads 8
 
 #define max_threads 64 
@@ -15,36 +17,35 @@
 #define inner_iterations max_threads*max_threads
 #define outer_iterations 30 * max_threads/n_threads
 
-typedef atomic_int int_type; // careful, Max value is 232!
-// typedef int int_type; // careful, Max value is 232!
+// typedef int atomic_int; // careful, Max value is 232!
 
 /* Helper Functions */
 
-int_type sum_val(int_type *values, int_type size)
+atomic_int sum_val(atomic_int *values, atomic_int size)
 {
-    int_type sum = 0;
-    for (int_type i = 0; i < size; i++)
+    atomic_int sum = 0;
+    for (atomic_int i = 0; i < size; i++)
     {
         sum += values[i];
     }
     return sum;
 }
 
-double avg_val(double *values, int_type size)
+double avg_val(double *values, atomic_int size)
 {
     double sum = 0;
-    for (int_type i = 0; i < size; i++)
+    for (atomic_int i = 0; i < size; i++)
     {
         sum += values[i];
     }
     return sum / size;
 }
 
-double std_dev(double *values, int_type size)
+double std_dev(double *values, atomic_int size)
 {
     double avg = avg_val(values, size);
     double sum_sq_diff = 0;
-    for (int_type i = 0; i < size; i++)
+    for (atomic_int i = 0; i < size; i++)
     {
         double diff = values[i] - avg;
         sum_sq_diff += diff * diff;
@@ -52,7 +53,7 @@ double std_dev(double *values, int_type size)
     return sqrt(sum_sq_diff / size);
 }
 
-void reset_arr(int_type *array, int_type value, int size)
+void reset_arr(atomic_int *array, atomic_int value, int size)
 {
     for (int i = 0; i < size; i++)
         array[i] = value;
@@ -60,14 +61,14 @@ void reset_arr(int_type *array, int_type value, int size)
 
 /* Filter Lock */
 
-void filter_lock(int_type *level, int_type *victim, int_type tid)
+void filter_lock(atomic_int *level, atomic_int *victim, atomic_int tid)
 {
-    // int_type wait;
-    for (int_type j = 1; j < n_threads; j++)
+    // atomic_int wait;
+    for (atomic_int j = 1; j < n_threads; j++)
     {
         level[tid] = j;
         victim[j] = tid;
-        for (int_type k = 0; k < n_threads; k++)
+        for (atomic_int k = 0; k < n_threads; k++)
         {
             if (k == tid)
                 continue;
@@ -79,16 +80,16 @@ void filter_lock(int_type *level, int_type *victim, int_type tid)
     // return wait;
 }
 
-void filter_unlock(int_type *level, int_type tid)
+void filter_unlock(atomic_int *level, atomic_int tid)
 {
     level[tid] = 0;
 }
 
 /* Bock-Woo Lock */
 
-void block_woo_lock(int_type *competing, int_type *victim, int_type tid)
+void block_woo_lock(atomic_int *competing, atomic_int *victim, atomic_int tid)
 {
-    int_type j = 0;
+    atomic_int j = 0;
     competing[tid] = 1;
     do
     {
@@ -102,20 +103,20 @@ void block_woo_lock(int_type *competing, int_type *victim, int_type tid)
     // printf("tid: %d entereing CS at victim[%d]: %d \n", tid, j, victim[j]);
 }
 
-void block_woo_unlock(int_type *competing, int_type tid)
+void block_woo_unlock(atomic_int *competing, atomic_int tid)
 {
     competing[tid] = 0;
 }
 
 /* Peterson Tournament Binary Tree Lock */
 
-void peterson_lock(int_type *flag, int_type *victim, int_type tid, int_type level)
+void peterson_lock(atomic_int *flag, atomic_int *victim, atomic_int tid, atomic_int level)
 {
-    int_type i = floor(tid / pow(2, level)); // tid has to be computed level wise
-    int_type j = i + (i + 1) % 2 - i % 2;    // competitor
-    int_type i_flag = i + (pow(2, level) - 1) / pow(2, level) * 2 * n_threads;
-    int_type j_flag = i_flag + (i + 1) % 2 - i % 2;
-    int_type ij_victim = floor(i / 2) + (pow(2, level) - 1) / pow(2, level) * n_threads; // works
+    atomic_int i = floor(tid / pow(2, level)); // tid has to be computed level wise
+    atomic_int j = i + (i + 1) % 2 - i % 2;    // competitor
+    atomic_int i_flag = i + (pow(2, level) - 1) / pow(2, level) * 2 * n_threads;
+    atomic_int j_flag = i_flag + (i + 1) % 2 - i % 2;
+    atomic_int ij_victim = floor(i / 2) + (pow(2, level) - 1) / pow(2, level) * n_threads; // works
 
     // printf("tid: %d level: %d\n", tid, level);
     // printf("i: %d j: %d \n", i, j);uint8_t
@@ -128,176 +129,224 @@ void peterson_lock(int_type *flag, int_type *victim, int_type tid, int_type leve
     };
 }
 
-void peterson_unlock(int_type *flag, int_type tid, int_type level)
+void peterson_unlock(atomic_int *flag, atomic_int tid, atomic_int level)
 {
-    int_type i = floor(tid / pow(2, level)); // tid has to be computed level wise
-    int_type i_flag = i + (pow(2, level) - 1) / pow(2, level) * 2 * n_threads;
+    atomic_int i = floor(tid / pow(2, level)); // tid has to be computed level wise
+    atomic_int i_flag = i + (pow(2, level) - 1) / pow(2, level) * 2 * n_threads;
 
     flag[i_flag] = 0;
 }
 
-void peterson_binary(int_type *flag, int_type *victim, int_type tid)
+void peterson_binary(atomic_int *flag, atomic_int *victim, atomic_int tid)
 {
     assert(log2(n_threads) == round(log2(n_threads)) && "n_threads does not suffice requirement: n_threads == 2**n");
-    int_type levels = log2(n_threads);
+    atomic_int levels = log2(n_threads);
     // printf("tid: %d in level: %d", tid, levels);
-    for (int_type level = 0; level < levels; level++)
+    for (atomic_int level = 0; level < levels; level++)
     {
         // printf("tid: %d in level: %d", tid, level);
         peterson_lock(flag, victim, tid, level);
     }
 }
 
-void peterson_release(int_type *flag, int_type tid)
+void peterson_release(atomic_int *flag, atomic_int tid)
 {
-    int_type levels = log2(n_threads);
-    for (int_type level = 0; level < levels; level++)
+    atomic_int levels = log2(n_threads);
+    for (atomic_int level = 0; level < levels; level++)
     {
         peterson_unlock(flag, tid, level);
     }
 }
 
+
+
 int main(int argc, char **argv)
 {
+    // Check if the correct number of arguments is provided
+    if (argc != 3) {
+        printf("Invalid number of arguments. Usage: %s <number threads> <lock to use>\n", argv[0]);
+        return 1;
+    }
+
+    // receive number of threads as command line argument
+    int size = atoi(argv[1]);
+    int which_lock = atoi(argv[2]);
+
+    // Check if the argument format is valid
+    if (size <= 0) {
+        printf("Invalid argument. The number of threads must be a positive integer.\n");
+        return 1;
+    }
+
+    // Check if the argument format is valid
+    if ((which_lock <= 0) || (which_lock > 4)) {
+        printf("Invalid argument. Second argument must be either 1, 2, 3 or 4.\n");
+        return 1;
+    }
+
+    // Filter lock registers
+    atomic_int* level;
+    level = (atomic_int*) malloc(size * sizeof(atomic_int));
+    memset(level, 0, size * sizeof(atomic_int));
+
+    atomic_int* victim;
+    victim = (atomic_int*) malloc(size * sizeof(atomic_int));
+    memset(victim, 231, size * sizeof(atomic_int));
+
+    // Peterson tournament binary tree lock registers
+    int locks_in_tree = (size-1);
+
+    atomic_int* victim_peterson;
+    victim_peterson = (atomic_int*) malloc(locks_in_tree * sizeof(atomic_int));
+    memset(victim_peterson, 231, locks_in_tree * sizeof(atomic_int));
+
+    atomic_int* flag_peterson;
+    flag_peterson = (atomic_int*) malloc(2*locks_in_tree * sizeof(atomic_int));
+    memset(flag_peterson, 0, 2*locks_in_tree * sizeof(atomic_int));
+
+    // Block-Woo lock registers
+    atomic_int* competing;
+    competing = (atomic_int*) malloc(size * sizeof(atomic_int));
+    memset(competing, 0, size * sizeof(atomic_int));
+
+
+
+    atomic_int* local_counter_arr;
+    local_counter_arr = (atomic_int*) malloc(size * sizeof(atomic_int));
+    memset(local_counter_arr, 0, size * sizeof(atomic_int));
+
     assert(232 > n_threads && "unint8_t OVERFLOW");
-    printf("%d %d %d\n", n_threads, outer_iterations,inner_iterations);
+
+    printf("%d %d %d\n", n_threads, outer_iterations,inner_iterations); 
     // printf("iteration runtime: %f\n", iteration_runtime);
 
     for (int j = 0; j < outer_iterations; j++)
     {
-        int_type level[n_threads] = {0};
-        int_type competing[n_threads] = {0};
-        int_type victim[n_threads] = {231};
+        // Filter lock reset registers 
+        memset(level, 0, size * sizeof(atomic_int));
+        memset(victim, 231, size * sizeof(atomic_int));
 
-        int_type victim_peterson[flag_size] = {231}, flag_peterson[flag_size] = {0};
+        // Peterson tournament binary tree reset registers
+        memset(victim_peterson, 231, locks_in_tree * sizeof(atomic_int));
+        memset(flag_peterson, 0, 2*locks_in_tree * sizeof(atomic_int));
 
-        int_type lock_log[inner_iterations] = {231}; // stores order of access into CSQ[i]  by thread_ID
-        int_type tid;
-        int index = 0;
-        int th_index = 0; // WHY DOESNT THIS DO ANYTHING
+        // Block-Woo reset registers
+        memset(competing, 0, size * sizeof(atomic_int));        
 
-        double iteration_start;
-        double max_times[n_threads];
-        double min_times[n_threads];
-        double avg_times[n_threads];
-        int_type th_indices[n_threads];
+        atomic_int lock_acquisition_log[inner_iterations] = {231}; // stores order of access into CSQ[i]  by thread_ID
+        atomic_int tid;
 
+        int shared_counter = 0;
+        int local_counter = 0;
+        memset(local_counter_arr, 0, size * sizeof(atomic_int));
+
+        // OpenMP lock as baseline
         omp_lock_t baseline;
         omp_init_lock(&baseline);
 
-        #pragma omp parallel private(tid, th_index) shared(iteration_start, level, victim, competing, victim_peterson, flag_peterson, lock_log, index, max_times, min_times, avg_times, th_indices)
-        
+        #pragma omp parallel private(tid, local_counter) shared(level, victim, victim_peterson, flag_peterson, competing, lock_acquisition_log, shared_counter, local_counter_arr)
         {
             assert(omp_get_num_threads() == n_threads && "set n_threads correctly");
             tid = omp_get_thread_num();
-            double max_time = 0.0;
-            double avg_time = 0.0;
-            double min_time = 10 * 1e6;
 
             #pragma omp single
             {
-                reset_arr(level, 0, n_threads);
-                reset_arr(competing, 0, n_threads);
-                reset_arr(victim, 231, n_threads);
+                // Filter lock reset registers 
+                memset(level, 0, size * sizeof(atomic_int));
+                memset(victim, 231, size * sizeof(atomic_int));
 
-                reset_arr(flag_peterson, 0, flag_size);
-                reset_arr(victim_peterson, 231, flag_size);
+                // Peterson tournament binary tree reset registers
+                memset(victim_peterson, 231, locks_in_tree * sizeof(atomic_int));
+                memset(flag_peterson, 0, 2*locks_in_tree * sizeof(atomic_int));
 
-                iteration_start = omp_get_wtime();
+                // Block-Woo reset registers
+                memset(competing, 0, size * sizeof(atomic_int));  
+
+                shared_counter = 0;
             }
+            
+            local_counter = 0; // does only take effect here, not outside the parallel region
 
-            th_index = 0; // does only take effect here, not outside the parallel region
             #pragma omp barrier
             #pragma omp barrier
 
-            // while ((omp_get_wtime()-iteration_start) < iteration_runtime)
-            // for (int_type s = 0; s < shots; s++)
-            while (index < (inner_iterations - n_threads))
+            while (shared_counter < (inner_iterations - n_threads))
             {
-                // #pragma omp barrier // NECESSARY??
-                // #pragma omp barrier // NECESSARY??
+                switch (which_lock)
+                {
+                case 1:
+                    omp_set_lock(&baseline);
+                    break;
+                case 2:
+                    filter_lock(level, victim, tid);
+                    break;
+                case 3:
+                    block_woo_lock(competing, victim, tid);
+                    break;
+                case 4:
+                    peterson_binary(flag_peterson, victim_peterson, tid);
+                    break;
+                }
 
-                double time_1 = omp_get_wtime();
+                /* Begin of critical section */
 
-                // omp_set_lock(&baseline);
-                filter_lock(level, victim, tid);
-                // block_woo_lock(competing, victim, tid);
-                // peterson_binary(flag_peterson, victim_peterson, tid);
+                // record order of lock acquisitions for fairness benchmark
+                lock_acquisition_log[shared_counter] = tid;
 
-                //////////////////////////////
-                // Critical section //////////
+                // increment counters for correctness check
+                shared_counter += 1;
+                local_counter  += 1;
 
-                double time_2 = omp_get_wtime();
-                double time_dif = (time_2 - time_1) * 1e6; // micro seconds
-                avg_time += time_dif;
-
-                if (time_dif > max_time)
-                    max_time = time_dif;
-                if (time_dif < min_time)
-                    min_time = time_dif;
-
-                lock_log[index] = tid;
-
-                index += 1;
-                th_index += 1;
-
-                //////////////////////////////
-                //////////////////////////////
-
-                // omp_unset_lock(&baseline);
-                filter_unlock(level, tid);
-                // block_woo_unlock(competing, tid);
-                // peterson_release(flag_peterson, tid);
+                /* End of critical section */
+                
+                switch (which_lock)
+                {
+                case 1:
+                    omp_unset_lock(&baseline);
+                    break;
+                case 2:
+                    filter_unlock(level, tid);
+                    break;
+                case 3:
+                    block_woo_unlock(competing, tid);
+                    break;
+                case 4:
+                    peterson_release(flag_peterson, tid);
+                    break;
+                }
             }
 
-            // COLLECT DATA
+            #pragma omp barrier
+            #pragma omp barrier
+            
+            local_counter_arr[tid] = local_counter;
+
             #pragma omp barrier
             #pragma omp barrier
 
-            min_times[tid] = min_time;
-            max_times[tid] = max_time;
-            avg_times[tid] = avg_time / th_index;
-            th_indices[tid] = th_index;
-
-            /////////////////////////////////////
-            // STATISTICS
-            /////////////////////////////////////
-            #pragma omp barrier
-            #pragma omp barrier
-
+            /* Correctness check */
             #pragma omp single
             {
-                int_type real_index = sum_val(th_indices, n_threads);
-                assert(index == real_index && "RACE CONDITION was witnessed");
-                /*
-
-                tID ----- th_indices --------- min_times -------- ...
-                0   --       30        --       0.34       --
-                ------------------------------------------------
-                1   --       20        --       0.20       --
-                ------------------------------------------------
-                ...   --                --                  --
-                ------------------------------------------------
-                7   --       50        --       0.66       --
-
-                */
-
-                // printf("\ntid acquisitions min_time max_time avg_time\n");
-                // for (int i = 0; i < n_threads; i++)
-                //     printf("%d %d %f %f %f\n", i, th_indices[i], min_times[i], max_times[i], avg_times[i]);
-
-                /*
-
-                0 3 2 1 2 1 1 1 3 0 ....
-
-                */
-
-                for (int i = 0; i < inner_iterations; i++)
-                    printf("%d ", lock_log[i]);
-                printf("\n");
+                atomic_int sum_local_counters = sum_val(local_counter_arr, n_threads);
+                //assert(shared_counter == sum_local_counters && "ERROR: Counter mismatch");
+                //assert(shared_counter == inner_iterations   && "ERROR: Race condition");
+                //printf("\nshared counter: %d vs. sum local counters: %d\n", shared_counter, sum_local_counters);
+                //printf("\nshared counter: %d vs. prescribed iterations: %d\n", shared_counter, inner_iterations-1);
             }
         }
         omp_destroy_lock(&baseline);
     }
+
+    // free allocated memory
+
+    printf("\nSuccess!\n");
     return 0;
 }
+
+/*
+
+Problems:
+Assertion shared_counter == sum_local_counters fails for binary tree lock
+Assertion shared_counter == inner_iterations fails for all locks
+
+*/

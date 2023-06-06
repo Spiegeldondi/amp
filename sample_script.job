@@ -1,0 +1,11 @@
+#!/bin/bash
+
+#SBATCH -p q_student
+#SBATCH -N 1
+#SBTACH --time=1:00
+
+for num_threads in 2 4 8 16 32 64
+do
+  export OMP_NUM_THREADS=$num_threads
+  ./omp_test $num_threads > ./out_$num_threads
+done

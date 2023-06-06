@@ -233,7 +233,7 @@ int main(int argc, char **argv)
         // Block-Woo reset registers
         memset(competing, 0, size * sizeof(atomic_int));        
 
-        atomic_int lock_acquisition_log[inner_iterations] = {231}; // stores order of access into CSQ[i]  by thread_ID
+        int lock_acquisition_log[inner_iterations] = {231}; // stores order of access into CSQ[i]  by thread_ID
         atomic_int tid;
 
         int shared_counter = 0;
@@ -328,7 +328,7 @@ int main(int argc, char **argv)
             #pragma omp single
             {
                 atomic_int sum_local_counters = sum_val(local_counter_arr, n_threads);
-                //assert(shared_counter == sum_local_counters && "ERROR: Counter mismatch");
+                assert(shared_counter == sum_local_counters && "ERROR: Counter mismatch");
                 //assert(shared_counter == inner_iterations   && "ERROR: Race condition");
                 //printf("\nshared counter: %d vs. sum local counters: %d\n", shared_counter, sum_local_counters);
                 //printf("\nshared counter: %d vs. prescribed iterations: %d\n", shared_counter, inner_iterations-1);
@@ -353,10 +353,16 @@ int main(int argc, char **argv)
 /*
 
 Problems:
-Assertion shared_counter == sum_local_counters fails for binary tree lock
-Assertion shared_counter == inner_iterations fails for all locks
-Block-Woo lock with 2 threads is very unfair
+1.  Assertion shared_counter == sum_local_counters fails for binary tree lock
+2.  Assertion shared_counter == inner_iterations fails for all locks
+3.  Block-Woo lock with 2 threads is very unfair
     -> huge gap in rare case when doing many locks
     -> one thread completely left out when doing 2 x 2 locks
+
+4.  When using n_threads as input and removing the max_threads variable, 
+    the inner loop must run till inner_iterations (without - n_threads)
+
+5.  lock_acquisition_log (former lock_log) should not be atomic (serialization!)
+    -> one demo run with 4 threads also worked without
     
 */

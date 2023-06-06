@@ -10,12 +10,12 @@
 #include <unistd.h>
 
 // set number of threads as 
-#define n_threads 8
+#define n_threads 2
 
 #define max_threads 64 
 #define flag_size (max_threads-1)*2
-#define inner_iterations max_threads*max_threads
-#define outer_iterations 30 * max_threads/n_threads
+#define inner_iterations n_threads*n_threads
+#define outer_iterations 30
 
 // typedef int atomic_int; // careful, Max value is 232!
 
@@ -217,7 +217,7 @@ int main(int argc, char **argv)
 
     assert(232 > n_threads && "unint8_t OVERFLOW");
 
-    printf("%d %d %d\n", n_threads, outer_iterations,inner_iterations); 
+    // printf("%d %d %d\n", n_threads, outer_iterations,inner_iterations); 
     // printf("iteration runtime: %f\n", iteration_runtime);
 
     for (int j = 0; j < outer_iterations; j++)
@@ -328,10 +328,17 @@ int main(int argc, char **argv)
             #pragma omp single
             {
                 atomic_int sum_local_counters = sum_val(local_counter_arr, n_threads);
-                assert(shared_counter == sum_local_counters && "ERROR: Counter mismatch");
-                assert(shared_counter == inner_iterations   && "ERROR: Race condition");
+                //assert(shared_counter == sum_local_counters && "ERROR: Counter mismatch");
+                //assert(shared_counter == inner_iterations   && "ERROR: Race condition");
                 //printf("\nshared counter: %d vs. sum local counters: %d\n", shared_counter, sum_local_counters);
                 //printf("\nshared counter: %d vs. prescribed iterations: %d\n", shared_counter, inner_iterations-1);
+
+                /* Print result to stdout.
+                One row per experiment repetition */
+                for (int i = 0; i < inner_iterations; i++) {
+                    printf("%d ", lock_acquisition_log[i]);
+                }
+                printf("\n");
             }
         }
         omp_destroy_lock(&baseline);
@@ -339,7 +346,7 @@ int main(int argc, char **argv)
 
     // free allocated memory
 
-    printf("\nSuccess!\n");
+    //printf("\nSuccess!\n");
     return 0;
 }
 

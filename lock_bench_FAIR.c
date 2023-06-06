@@ -265,7 +265,7 @@ int main(int argc, char **argv)
                 shared_counter = 0;
             }
             
-            local_counter = 0; // does only take effect here, not outside the parallel region
+            local_counter = 0;
 
             #pragma omp barrier
             #pragma omp barrier
@@ -328,8 +328,8 @@ int main(int argc, char **argv)
             #pragma omp single
             {
                 atomic_int sum_local_counters = sum_val(local_counter_arr, n_threads);
-                //assert(shared_counter == sum_local_counters && "ERROR: Counter mismatch");
-                //assert(shared_counter == inner_iterations   && "ERROR: Race condition");
+                assert(shared_counter == sum_local_counters && "ERROR: Counter mismatch");
+                assert(shared_counter == inner_iterations   && "ERROR: Race condition");
                 //printf("\nshared counter: %d vs. sum local counters: %d\n", shared_counter, sum_local_counters);
                 //printf("\nshared counter: %d vs. prescribed iterations: %d\n", shared_counter, inner_iterations-1);
             }

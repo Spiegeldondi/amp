@@ -10,7 +10,7 @@
 #include <unistd.h>
 
 // set number of threads as 
-#define n_threads 2
+#define n_threads 4
 
 #define max_threads 64 
 #define flag_size (max_threads-1)*2
@@ -355,5 +355,8 @@ int main(int argc, char **argv)
 Problems:
 Assertion shared_counter == sum_local_counters fails for binary tree lock
 Assertion shared_counter == inner_iterations fails for all locks
-
+Block-Woo lock with 2 threads is very unfair
+    -> huge gap in rare case when doing many locks
+    -> one thread completely left out when doing 2 x 2 locks
+    
 */

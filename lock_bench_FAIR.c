@@ -10,11 +10,11 @@
 #include <unistd.h>
 
 // set number of threads as 
-#define n_threads 4
+//#define n_threads 8
 
 #define max_threads 64 
 #define flag_size (max_threads-1)*2
-#define inner_iterations n_threads*n_threads
+//#define inner_iterations n_threads*n_threads
 #define outer_iterations 30
 
 // typedef int atomic_int; // careful, Max value is 232!
@@ -61,7 +61,7 @@ void reset_arr(atomic_int *array, atomic_int value, int size)
 
 /* Filter Lock */
 
-void filter_lock(atomic_int *level, atomic_int *victim, atomic_int tid)
+void filter_lock(atomic_int *level, atomic_int *victim, atomic_int tid, int n_threads)
 {
     // atomic_int wait;
     for (atomic_int j = 1; j < n_threads; j++)
@@ -87,7 +87,7 @@ void filter_unlock(atomic_int *level, atomic_int tid)
 
 /* Bock-Woo Lock */
 
-void block_woo_lock(atomic_int *competing, atomic_int *victim, atomic_int tid)
+void block_woo_lock(atomic_int *competing, atomic_int *victim, atomic_int tid, int n_threads)
 {
     atomic_int j = 0;
     competing[tid] = 1;
@@ -110,7 +110,7 @@ void block_woo_unlock(atomic_int *competing, atomic_int tid)
 
 /* Peterson Tournament Binary Tree Lock */
 
-void peterson_lock(atomic_int *flag, atomic_int *victim, atomic_int tid, atomic_int level)
+void peterson_lock(atomic_int *flag, atomic_int *victim, atomic_int tid, atomic_int level, int n_threads)
 {
     atomic_int i = floor(tid / pow(2, level)); // tid has to be computed level wise
     atomic_int j = i + (i + 1) % 2 - i % 2;    // competitor
@@ -129,7 +129,7 @@ void peterson_lock(atomic_int *flag, atomic_int *victim, atomic_int tid, atomic_
     };
 }
 
-void peterson_unlock(atomic_int *flag, atomic_int tid, atomic_int level)
+void peterson_unlock(atomic_int *flag, atomic_int tid, atomic_int level, int n_threads)
 {
     atomic_int i = floor(tid / pow(2, level)); // tid has to be computed level wise
     atomic_int i_flag = i + (pow(2, level) - 1) / pow(2, level) * 2 * n_threads;
@@ -137,7 +137,7 @@ void peterson_unlock(atomic_int *flag, atomic_int tid, atomic_int level)
     flag[i_flag] = 0;
 }
 
-void peterson_binary(atomic_int *flag, atomic_int *victim, atomic_int tid)
+void peterson_binary(atomic_int *flag, atomic_int *victim, atomic_int tid, int n_threads)
 {
     assert(log2(n_threads) == round(log2(n_threads)) && "n_threads does not suffice requirement: n_threads == 2**n");
     atomic_int levels = log2(n_threads);
@@ -145,16 +145,16 @@ void peterson_binary(atomic_int *flag, atomic_int *victim, atomic_int tid)
     for (atomic_int level = 0; level < levels; level++)
     {
         // printf("tid: %d in level: %d", tid, level);
-        peterson_lock(flag, victim, tid, level);
+        peterson_lock(flag, victim, tid, level, n_threads);
     }
 }
 
-void peterson_release(atomic_int *flag, atomic_int tid)
+void peterson_release(atomic_int *flag, atomic_int tid, int n_threads)
 {
     atomic_int levels = log2(n_threads);
     for (atomic_int level = 0; level < levels; level++)
     {
-        peterson_unlock(flag, tid, level);
+        peterson_unlock(flag, tid, level, n_threads);
     }
 }
 
@@ -169,11 +169,12 @@ int main(int argc, char **argv)
     }
 
     // receive number of threads as command line argument
-    int size = atoi(argv[1]);
+    int n_threads = atoi(argv[1]);
+    int inner_iterations = n_threads*n_threads + n_threads; // + n_threads as safety buffer
     int which_lock = atoi(argv[2]);
 
     // Check if the argument format is valid
-    if (size <= 0) {
+    if (n_threads <= 0) {
         printf("Invalid argument. The number of threads must be a positive integer.\n");
         return 1;
     }
@@ -186,59 +187,58 @@ int main(int argc, char **argv)
 
     // Filter lock registers
     atomic_int* level;
-    level = (atomic_int*) malloc(size * sizeof(atomic_int));
-    memset(level, 0, size * sizeof(atomic_int));
+    level = (atomic_int*) malloc(n_threads * sizeof(atomic_int));
+    reset_arr(level, 0, n_threads);
 
     atomic_int* victim;
-    victim = (atomic_int*) malloc(size * sizeof(atomic_int));
-    memset(victim, 231, size * sizeof(atomic_int));
+    victim = (atomic_int*) malloc(n_threads * sizeof(atomic_int));
+    reset_arr(victim, 231, n_threads);
 
     // Peterson tournament binary tree lock registers
-    int locks_in_tree = (size-1);
+    int locks_in_tree = (n_threads-1);
 
     atomic_int* victim_peterson;
     victim_peterson = (atomic_int*) malloc(locks_in_tree * sizeof(atomic_int));
-    memset(victim_peterson, 231, locks_in_tree * sizeof(atomic_int));
+    reset_arr(victim_peterson, 231, locks_in_tree);
 
     atomic_int* flag_peterson;
     flag_peterson = (atomic_int*) malloc(2*locks_in_tree * sizeof(atomic_int));
-    memset(flag_peterson, 0, 2*locks_in_tree * sizeof(atomic_int));
+    reset_arr(flag_peterson, 0, 2*locks_in_tree);
 
     // Block-Woo lock registers
     atomic_int* competing;
-    competing = (atomic_int*) malloc(size * sizeof(atomic_int));
-    memset(competing, 0, size * sizeof(atomic_int));
+    competing = (atomic_int*) malloc(n_threads * sizeof(atomic_int));
+    reset_arr(competing, 0, n_threads);
 
 
 
     atomic_int* local_counter_arr;
-    local_counter_arr = (atomic_int*) malloc(size * sizeof(atomic_int));
-    memset(local_counter_arr, 0, size * sizeof(atomic_int));
+    local_counter_arr = (atomic_int*) malloc(n_threads * sizeof(atomic_int));
+    reset_arr(local_counter_arr, 0, n_threads);
 
     assert(232 > n_threads && "unint8_t OVERFLOW");
-
-    // printf("%d %d %d\n", n_threads, outer_iterations,inner_iterations); 
-    // printf("iteration runtime: %f\n", iteration_runtime);
 
     for (int j = 0; j < outer_iterations; j++)
     {
         // Filter lock reset registers 
-        memset(level, 0, size * sizeof(atomic_int));
-        memset(victim, 231, size * sizeof(atomic_int));
+        reset_arr(level, 0, n_threads * sizeof(atomic_int));
+        reset_arr(victim, 231, n_threads);
 
         // Peterson tournament binary tree reset registers
-        memset(victim_peterson, 231, locks_in_tree * sizeof(atomic_int));
-        memset(flag_peterson, 0, 2*locks_in_tree * sizeof(atomic_int));
+        reset_arr(victim_peterson, 231, locks_in_tree * sizeof(atomic_int));
+        reset_arr(flag_peterson, 0, 2*locks_in_tree);
 
         // Block-Woo reset registers
-        memset(competing, 0, size * sizeof(atomic_int));        
+        reset_arr(competing, 0, n_threads);   
 
-        int lock_acquisition_log[inner_iterations] = {231}; // stores order of access into CSQ[i]  by thread_ID
+        int* lock_acquisition_log = malloc(inner_iterations * sizeof(int));
+        reset_arr(lock_acquisition_log, 231, inner_iterations);
+        
         atomic_int tid;
 
         int shared_counter = 0;
         int local_counter = 0;
-        memset(local_counter_arr, 0, size * sizeof(atomic_int));
+        reset_arr(local_counter_arr, 0, n_threads);
 
         // OpenMP lock as baseline
         omp_lock_t baseline;
@@ -252,15 +252,15 @@ int main(int argc, char **argv)
             #pragma omp single
             {
                 // Filter lock reset registers 
-                memset(level, 0, size * sizeof(atomic_int));
-                memset(victim, 231, size * sizeof(atomic_int));
+                reset_arr(level, 0, n_threads);
+                reset_arr(victim, 231, n_threads);
 
                 // Peterson tournament binary tree reset registers
-                memset(victim_peterson, 231, locks_in_tree * sizeof(atomic_int));
-                memset(flag_peterson, 0, 2*locks_in_tree * sizeof(atomic_int));
+                reset_arr(victim_peterson, 231, locks_in_tree);
+                reset_arr(flag_peterson, 0, 2*locks_in_tree);
 
                 // Block-Woo reset registers
-                memset(competing, 0, size * sizeof(atomic_int));  
+                reset_arr(competing, 0, n_threads);  
 
                 shared_counter = 0;
             }
@@ -270,7 +270,7 @@ int main(int argc, char **argv)
             #pragma omp barrier
             #pragma omp barrier
 
-            while (shared_counter < (inner_iterations - n_threads))
+            while (shared_counter < n_threads*n_threads - 1)
             {
                 switch (which_lock)
                 {
@@ -278,13 +278,13 @@ int main(int argc, char **argv)
                     omp_set_lock(&baseline);
                     break;
                 case 2:
-                    filter_lock(level, victim, tid);
+                    filter_lock(level, victim, tid, n_threads);
                     break;
                 case 3:
-                    block_woo_lock(competing, victim, tid);
+                    block_woo_lock(competing, victim, tid, n_threads);
                     break;
                 case 4:
-                    peterson_binary(flag_peterson, victim_peterson, tid);
+                    peterson_binary(flag_peterson, victim_peterson, tid, n_threads);
                     break;
                 }
 
@@ -311,7 +311,7 @@ int main(int argc, char **argv)
                     block_woo_unlock(competing, tid);
                     break;
                 case 4:
-                    peterson_release(flag_peterson, tid);
+                    peterson_release(flag_peterson, tid, n_threads);
                     break;
                 }
             }

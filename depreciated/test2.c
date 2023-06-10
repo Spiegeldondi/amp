@@ -24,7 +24,7 @@ void peterson_lock(atomic_int* flag, atomic_int* victim, int threadId) {
     flag[i] = 1;
     *victim = i;
 
-    while (flag[j] && *victim == i) {}
+    while (flag[j] && *victim == i) { /* a printf() in here or a pragma omp critical reduces the spread between shared counter and counts */ }
 }
 
 void peterson_unlock(atomic_int* flag, int threadId) {
@@ -44,7 +44,6 @@ void tree_lock(atomic_int* flag, atomic_int* victim, int threadId) {
 
         /* 2-thread Peterson lock */
         peterson_lock(&flag[flag_offset], &victim[victim_offset], i%2);
-
     }
 }
 
@@ -91,11 +90,12 @@ int main(int argc, char **argv)
     /* Correctness check */
     int shared_counter = 0;
     int local_counter = 0;
+    int reference_counter = 0;
 
     /* Experiment setup */
-    int shots = 1024;
+    int shots = 100000;
 
-    #pragma omp parallel private(threadId, local_counter) shared(flag, victim, flag_tree, victim_tree, shared_counter)
+    #pragma omp parallel private(threadId, local_counter) shared(flag, victim, flag_tree, victim_tree, shared_counter, reference_counter)
     {
         threadId = omp_get_thread_num();
 
@@ -111,6 +111,7 @@ int main(int argc, char **argv)
             //omp_set_lock(&baseline);
 
             shared_counter += 1;
+            local_counter += 1;
 
             tree_unlock(flag_tree, threadId);
             //peterson_unlock(flag, threadId);
@@ -118,11 +119,16 @@ int main(int argc, char **argv)
 
         }
 
+        #pragma omp barrier
+        
+        #pragma omp critical
+        reference_counter += local_counter;
+
     }
 
     omp_destroy_lock(&baseline);
 
-    printf("\nshared counter: %d vs. expected value: %d\n", shared_counter, n_threads*shots);
+    printf("\nshared counter: %d vs. expected value: %d and sum of local counters: %d\n", shared_counter, n_threads*shots, reference_counter);
 
     return 0;
 }

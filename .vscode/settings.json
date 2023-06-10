@@ -4,6 +4,9 @@
         "array": "c",
         "string_view": "c",
         "initializer_list": "c",
-        "utility": "c"
+        "utility": "c",
+        "unistd.h": "c",
+        "stdio.h": "c",
+        "stdlib.h": "c"
     }
 }

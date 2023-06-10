@@ -353,16 +353,16 @@ int main(int argc, char **argv)
 /*
 
 Problems:
-1.  Assertion shared_counter == sum_local_counters fails for binary tree lock
-2.  Assertion shared_counter == inner_iterations fails for all locks
-3.  Block-Woo lock with 2 threads is very unfair
+1.  Assertion shared_counter == sum_local_counters fails for binary tree lock PERFECTLY VALID
+2.  Assertion shared_counter == inner_iterations fails for all locks NOT NECESSARY
+3.  Block-Woo lock with 2 threads is very unfair DID NOT OCCUR ON LAPTOP
     -> huge gap in rare case when doing many locks
     -> one thread completely left out when doing 2 x 2 locks
 
-4.  When using n_threads as input and removing the max_threads variable, 
+4.  When using n_threads as input and removing the max_threads variable, FIXED THIS WITH BUFFER
     the inner loop must run till inner_iterations (without - n_threads)
 
-5.  lock_acquisition_log (former lock_log) should not be atomic (serialization!)
+5.  lock_acquisition_log (former lock_log) should not be atomic (serialization!) DONE
     -> one demo run with 4 threads also worked without
     
 */

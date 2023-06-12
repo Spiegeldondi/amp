@@ -101,7 +101,7 @@ int main(int argc, char **argv)
         omp_lock_t baseline;
         omp_init_lock(&baseline);
 
-        #pragma omp parallel private(tid, local_counter, l) shared(level, victim, victim_tree, flag_tree, competing, shared_counter, local_counter_arr)
+        #pragma omp parallel private(tid, local_counter, l, time_1, time_2) shared(level, victim, victim_tree, flag_tree, competing, shared_counter, local_counter_arr)
         {
             assert(omp_get_num_threads() == n_threads && "set n_threads correctly");
             tid = omp_get_thread_num();

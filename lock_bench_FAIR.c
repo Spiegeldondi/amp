@@ -15,7 +15,7 @@
 #define max_threads 64 
 #define flag_size (max_threads-1)*2
 //#define inner_iterations n_threads*n_threads
-#define outer_iterations 30
+#define outer_iterations 100
 
 // typedef int atomic_int; // careful, Max value is 232!
 
@@ -29,6 +29,18 @@ atomic_int sum_val(atomic_int *values, atomic_int size)
         sum += values[i];
     }
     return sum;
+}
+
+atomic_int non_zero(atomic_int *array, atomic_int size)
+{
+    atomic_int count = 0;
+    for (atomic_int i = 0; i < size; i++)
+    {
+        if(array[i] != 0) {
+            count += 1;
+        }
+    }
+    return count;
 }
 
 double avg_val(double *values, atomic_int size)
@@ -158,6 +170,36 @@ void peterson_release(atomic_int *flag, atomic_int tid, int n_threads)
     }
 }
 
+void alagarsamy_lock(atomic_int* TURN, atomic_int* Q, int threadId, int j, int n_threads) {
+    int i = threadId;
+
+    do {
+        j += 1;
+        Q[i] = j;
+        TURN[j] = i;
+        //printf("%d from thread: %d\n", j, threadId);
+        for (atomic_int k = 0; k < n_threads; k++) {
+            //printf("%d from thread: %d\n", j, threadId);
+            if (k == i) continue;
+            while ( !( (TURN[j]!=i) || ((Q[k]<j) && non_zero(Q, n_threads) <= j)) ) {}
+            // es kommt zum deadlock sobal sich alle beteiligten threads in dem while loop befinden (für n_threads >= 3)
+        }
+    } while ( !(TURN[j] == i) );
+}
+
+
+void alagarsamy_unlock(atomic_int* TURN, atomic_int* Q, int threadId, int j, int n_threads) {
+    int i = threadId;
+
+    for (atomic_int k = 1; k <= j-1; k++) {
+        TURN[k] = i; // typo? used k instead of j
+    }
+    for (atomic_int k = 0; k < n_threads; k++) {
+        if (k == i) continue;
+        while ( !( (Q[k]==0) || TURN[Q[k]]==k) ) {}
+    }
+    Q[i] = 0;
+}
 
 
 int main(int argc, char **argv)
@@ -180,8 +222,8 @@ int main(int argc, char **argv)
     }
 
     // Check if the argument format is valid
-    if ((which_lock <= 0) || (which_lock > 4)) {
-        printf("Invalid argument. Second argument must be either 1, 2, 3 or 4.\n");
+    if ((which_lock <= 0) || (which_lock > 5)) {
+        printf("Invalid argument. Second argument must be either 1, 2, 3, 4 or 5.\n");
         return 1;
     }
 
@@ -209,6 +251,17 @@ int main(int argc, char **argv)
     atomic_int* competing;
     competing = (atomic_int*) malloc(n_threads * sizeof(atomic_int));
     reset_arr(competing, 0, n_threads);
+
+    // Alagarsamy lock
+    int l = 0;
+
+    atomic_int* Q;
+    Q = (atomic_int*) malloc(n_threads * sizeof(atomic_int));
+    reset_arr(Q, 0, n_threads);
+
+    atomic_int* TURN;
+    TURN = (atomic_int*) malloc(n_threads * sizeof(atomic_int));
+    reset_arr(TURN, -1, n_threads);
 
 
 
@@ -244,7 +297,7 @@ int main(int argc, char **argv)
         omp_lock_t baseline;
         omp_init_lock(&baseline);
 
-        #pragma omp parallel private(tid, local_counter) shared(level, victim, victim_peterson, flag_peterson, competing, lock_acquisition_log, shared_counter, local_counter_arr)
+        #pragma omp parallel private(tid, local_counter, l) shared(level, victim, victim_peterson, flag_peterson, competing, lock_acquisition_log, shared_counter, local_counter_arr)
         {
             assert(omp_get_num_threads() == n_threads && "set n_threads correctly");
             tid = omp_get_thread_num();
@@ -286,6 +339,9 @@ int main(int argc, char **argv)
                 case 4:
                     peterson_binary(flag_peterson, victim_peterson, tid, n_threads);
                     break;
+                case 5:
+                    alagarsamy_lock(TURN, Q, tid, l, n_threads);
+                    break;
                 }
 
                 /* Begin of critical section */
@@ -312,6 +368,9 @@ int main(int argc, char **argv)
                     break;
                 case 4:
                     peterson_release(flag_peterson, tid, n_threads);
+                    break;
+                case 5:
+                    alagarsamy_unlock(TURN, Q, tid, l, n_threads);
                     break;
                 }
             }

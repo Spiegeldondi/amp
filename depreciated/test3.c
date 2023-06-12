@@ -9,7 +9,7 @@
 #include <stdatomic.h>
 #include <unistd.h>
 
-#define n_threads 8
+#define n_threads 4
 
 void reset_arr(atomic_int* array, atomic_int value, atomic_int size)
 {

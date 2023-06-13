@@ -9,7 +9,7 @@
 #include <stdatomic.h>
 #include <unistd.h>
 
-#define n_threads 4
+#define n_threads 5
 
 void reset_arr(atomic_int* array, atomic_int value, atomic_int size)
 {
@@ -34,13 +34,13 @@ void peterson_unlock(atomic_int* flag, int threadId) {
 
 void tree_lock(atomic_int* flag, atomic_int* victim, int threadId) {
 
-    atomic_int levels = log2(n_threads);
+    atomic_int levels = ceil(log2(n_threads));
 
     for (atomic_int l = 0; l < levels; l++) {
         atomic_int i = floor(threadId / pow(2, l));
 
-        //atomic_int flag_offset = 2 * floor(threadId / pow(2, l + 1)) + (pow(2, l) - 1) / pow(2, l) * 2 * n_threads;
-        atomic_int victim_offset = floor(i / 2) + (pow(2, l) - 1) / pow(2, l) * n_threads;
+        //atomic_int flag_offset = 2 * floor(threadId / pow(2, l + 1)) + (pow(2, l) - 1) / pow(2, l) * 2 * pow(2, levels);
+        atomic_int victim_offset = floor(i / 2) + (pow(2, l) - 1) / pow(2, l) * pow(2, levels);
         atomic_int flag_offset = 2 * victim_offset;
 
         /* 2-thread Peterson lock */
@@ -50,12 +50,12 @@ void tree_lock(atomic_int* flag, atomic_int* victim, int threadId) {
 
 void tree_unlock(atomic_int* flag, int threadId) {
     
-    atomic_int levels = log2(n_threads);
+    atomic_int levels = ceil(log2(n_threads));
 
     for (atomic_int l = 0; l < levels; l++) {
         atomic_int i = floor(threadId / pow(2, l));
 
-        atomic_int flag_offset = 2 * floor(threadId / pow(2, l + 1)) + (pow(2, l) - 1) / pow(2, l) * 2 * n_threads;
+        atomic_int flag_offset = 2 * floor(threadId / pow(2, l + 1)) + (pow(2, l) - 1) / pow(2, l) * 2 * pow(2, levels);
 
         /* 2-thread Peterson unlock */
         peterson_unlock(&flag[flag_offset], i%2);
@@ -74,7 +74,7 @@ int main(int argc, char **argv)
     reset_arr(flag, 0, n_threads);
 
     /* Tree lock */
-    int n_locks = n_threads - 1;
+    int n_locks = pow(2, ceil(log2(n_threads))) - 1;
 
     atomic_int* victim_tree;
     victim_tree = (atomic_int*) malloc(n_locks * sizeof(atomic_int));

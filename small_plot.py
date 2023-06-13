@@ -3,7 +3,6 @@ import re
 import glob
 
 import numpy as np
-import pandas as pd
 import matplotlib.pyplot as plt
 
 ##############################
@@ -109,7 +108,7 @@ if __name__ == '__main__':
     lock_dict = {1: 'OMP', 2: 'Filter', 3: 'Block-Woo', 4: 'Tree', 5: 'Alagarsamy'}
     
     cwd = os.getcwd()
-    paths = glob.glob(cwd+"/output/output_nebula/amp23s20/lock*")
+    paths = glob.glob(cwd+"/output/lock*")
 
     #paths= ["/output/output_nebula/amp23s20/lock3","/output/output_nebula/amp23s20/lock1"]
     

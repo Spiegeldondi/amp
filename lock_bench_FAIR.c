@@ -41,7 +41,7 @@ int main(int argc, char **argv)
     reset_arr(victim, 231, n_threads);
 
     // Peterson tournament binary tree lock registers
-    int n_locks = n_threads - 1;
+    int n_locks = pow(2,ceil(log2(n_threads)))- 1;
 
     atomic_int* victim_tree;
     victim_tree = (atomic_int*) malloc(n_locks * sizeof(atomic_int));

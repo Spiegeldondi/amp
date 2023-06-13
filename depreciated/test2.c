@@ -39,8 +39,9 @@ void tree_lock(atomic_int* flag, atomic_int* victim, int threadId) {
     for (atomic_int l = 0; l < levels; l++) {
         atomic_int i = floor(threadId / pow(2, l));
 
-        atomic_int flag_offset = 2 * floor(threadId / pow(2, l + 1)) + (pow(2, l) - 1) / pow(2, l) * 2 * n_threads;
+        //atomic_int flag_offset = 2 * floor(threadId / pow(2, l + 1)) + (pow(2, l) - 1) / pow(2, l) * 2 * n_threads;
         atomic_int victim_offset = floor(i / 2) + (pow(2, l) - 1) / pow(2, l) * n_threads;
+        atomic_int flag_offset = 2 * victim_offset;
 
         /* 2-thread Peterson lock */
         peterson_lock(&flag[flag_offset], &victim[victim_offset], i%2);

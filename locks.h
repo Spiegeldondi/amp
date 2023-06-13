@@ -165,7 +165,7 @@ void alagarsamy_lock(atomic_int* TURN, atomic_int* Q, int threadId, int j, int n
         for (atomic_int k = 0; k < n_threads; k++) {
             //printf("%d from thread: %d\n", j, threadId);
             if (k == i) continue;
-            while ( !( (TURN[j]!=i) || ((Q[k]<j) && non_zero(Q, n_threads) <= j)) ) {}
+            while ( !( (TURN[j]!=i) || ((Q[k]<j) && (non_zero(Q, n_threads) <= j))) ) {}
             // es kommt zum deadlock sobal sich alle beteiligten threads in dem while loop befinden (für n_threads >= 3)
         }
     } while ( !(TURN[j] == i) );

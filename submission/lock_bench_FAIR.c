@@ -4,7 +4,7 @@
 #include <omp.h>
 #include "locks.h"
 
-#define outer_iterations 30
+#define outer_iterations 10
 
 int main(int argc, char **argv)
 {

@@ -4,7 +4,7 @@
 #include <omp.h>
 #include "locks.h"
 
-#define outer_iterations 30
+#define outer_iterations 10
 
 int main(int argc, char **argv)
 {
@@ -82,14 +82,11 @@ int main(int argc, char **argv)
         reset_arr(victim, 231, n_threads);
 
         // Peterson tournament binary tree reset registers
-        reset_arr(victim_tree, -1, n_locks * sizeof(atomic_int));
+        reset_arr(victim_tree, 231, n_locks * sizeof(atomic_int));
         reset_arr(flag_tree, 0, 2*n_locks);
 
         // Block-Woo reset registers
-        reset_arr(competing, 0, n_threads);   
-
-        int* lock_acquisition_log = malloc(inner_iterations * sizeof(int));
-        reset_log(lock_acquisition_log, 231, inner_iterations);
+        reset_arr(competing, 0, n_threads);  
         
         atomic_int tid;
 
@@ -97,11 +94,14 @@ int main(int argc, char **argv)
         int local_counter = 0;
         reset_arr(local_counter_arr, 0, n_threads);
 
+        // Timing
+        double time_1, time_2;
+
         // OpenMP lock as baseline
         omp_lock_t baseline;
         omp_init_lock(&baseline);
 
-        #pragma omp parallel private(tid, local_counter, l) shared(level, victim, victim_tree, flag_tree, competing, lock_acquisition_log, shared_counter, local_counter_arr)
+        #pragma omp parallel private(tid, local_counter, l, time_1, time_2) shared(level, victim, victim_tree, flag_tree, competing, shared_counter, local_counter_arr)
         {
             assert(omp_get_num_threads() == n_threads && "set n_threads correctly");
             tid = omp_get_thread_num();
@@ -123,6 +123,14 @@ int main(int argc, char **argv)
             }
             
             local_counter = 0;
+
+            #pragma omp barrier
+            #pragma omp barrier
+
+            if (tid == 0)
+            {
+                time_1 = omp_get_wtime();
+            }
 
             #pragma omp barrier
             #pragma omp barrier
@@ -149,9 +157,6 @@ int main(int argc, char **argv)
                 }
 
                 /* Begin of critical section */
-
-                // record order of lock acquisitions for fairness benchmark
-                lock_acquisition_log[shared_counter] = tid;
 
                 // increment counters for correctness check
                 shared_counter += 1;
@@ -181,6 +186,13 @@ int main(int argc, char **argv)
 
             #pragma omp barrier
             #pragma omp barrier
+
+            if (tid == 0)
+            {
+                time_2 = omp_get_wtime();
+                double tp = shared_counter / (time_2 - time_1);
+                printf("%f\n", tp);
+            }
             
             local_counter_arr[tid] = local_counter;
 
@@ -194,13 +206,6 @@ int main(int argc, char **argv)
                 if (which_lock != 4) {
                     assert(shared_counter == sum_local_counters && "ERROR: Counter mismatch");
                 }
-
-                /* Print result to stdout.
-                One row per experiment repetition */
-                for (int i = 0; i < inner_iterations; i++) {
-                    printf("%d ", lock_acquisition_log[i]);
-                }
-                printf("\n");
             }
         }
         omp_destroy_lock(&baseline);

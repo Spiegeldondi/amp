@@ -1,0 +1,22 @@
+#!/bin/bash
+
+#SBATCH -p q_student
+#SBATCH -N 1
+#SBTACH --time=1:00
+
+for which_lock  in 1 2 3 4 5 
+do
+        mkdir ./output/lock$which_lock
+        for num_threads in 2 3 5 8 21 64
+        do
+                export OMP_NUM_THREADS=$num_threads
+                ./fair $num_threads $which_lock >       ./output/lock$which_lock/out_$num_threads-$which_lock.txt
+                wait
+                ./lat $num_threads $which_lock >        ./output/lock$which_lock/LAT_$num_threads-$which_lock.txt
+                wait
+                ./tp $num_threads $which_lock >         ./output/lock$which_lock/TP_$num_threads-$which_lock.txt
+                wait
+        done
+done
+wait
+echo "done" > output/done

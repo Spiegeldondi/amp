@@ -4,7 +4,7 @@
 #include <omp.h>
 #include "locks.h"
 
-#define outer_iterations 30
+#define outer_iterations 10
 
 int main(int argc, char **argv)
 {
@@ -82,14 +82,11 @@ int main(int argc, char **argv)
         reset_arr(victim, 231, n_threads);
 
         // Peterson tournament binary tree reset registers
-        reset_arr(victim_tree, -1, n_locks * sizeof(atomic_int));
+        reset_arr(victim_tree, 231, n_locks * sizeof(atomic_int));
         reset_arr(flag_tree, 0, 2*n_locks);
 
         // Block-Woo reset registers
-        reset_arr(competing, 0, n_threads);   
-
-        int* lock_acquisition_log = malloc(inner_iterations * sizeof(int));
-        reset_log(lock_acquisition_log, 231, inner_iterations);
+        reset_arr(competing, 0, n_threads);  
         
         atomic_int tid;
 
@@ -97,11 +94,14 @@ int main(int argc, char **argv)
         int local_counter = 0;
         reset_arr(local_counter_arr, 0, n_threads);
 
+        // Timing
+        double time_1, time_2;
+
         // OpenMP lock as baseline
         omp_lock_t baseline;
         omp_init_lock(&baseline);
 
-        #pragma omp parallel private(tid, local_counter, l) shared(level, victim, victim_tree, flag_tree, competing, lock_acquisition_log, shared_counter, local_counter_arr)
+        #pragma omp parallel private(tid, local_counter, l, time_1, time_2) shared(level, victim, victim_tree, flag_tree, competing, shared_counter, local_counter_arr)
         {
             assert(omp_get_num_threads() == n_threads && "set n_threads correctly");
             tid = omp_get_thread_num();
@@ -127,61 +127,72 @@ int main(int argc, char **argv)
             #pragma omp barrier
             #pragma omp barrier
 
-            while (shared_counter < n_threads*n_threads - 1)
+        
+            switch (which_lock)
             {
-                switch (which_lock)
-                {
-                case 1:
-                    omp_set_lock(&baseline);
-                    break;
-                case 2:
-                    filter_lock(level, victim, tid, n_threads);
-                    break;
-                case 3:
-                    block_woo_lock(competing, victim, tid, n_threads);
-                    break;
-                case 4:
-                    tree_lock(flag_tree, victim_tree, tid, n_threads);
-                    break;
+            case 1:
+                time_1 = omp_get_wtime();
+                omp_set_lock(&baseline);
+                time_2 = omp_get_wtime();
+                break;
+            case 2:
+                time_1 = omp_get_wtime();
+                filter_lock(level, victim, tid, n_threads);
+                time_2 = omp_get_wtime();
+                break;
+            case 3:
+                time_1 = omp_get_wtime();
+                block_woo_lock(competing, victim, tid, n_threads);
+                time_2 = omp_get_wtime();
+                break;
+            case 4:
+                time_1 = omp_get_wtime();
+                tree_lock(flag_tree, victim_tree, tid, n_threads);
+                time_2 = omp_get_wtime();
+                break;
                 case 5:
-                    alagarsamy_lock(TURN, Q, tid, l, n_threads);
-                    break;
+                time_1 = omp_get_wtime();
+                alagarsamy_lock(TURN, Q, tid, l, n_threads);
+                time_2 = omp_get_wtime();
+                break;
                 }
 
-                /* Begin of critical section */
+            /* Begin of critical section */
 
-                // record order of lock acquisitions for fairness benchmark
-                lock_acquisition_log[shared_counter] = tid;
-
-                // increment counters for correctness check
-                shared_counter += 1;
-                local_counter  += 1;
-
-                /* End of critical section */
-                
-                switch (which_lock)
-                {
-                case 1:
-                    omp_unset_lock(&baseline);
-                    break;
-                case 2:
-                    filter_unlock(level, tid);
-                    break;
-                case 3:
-                    block_woo_unlock(competing, tid);
-                    break;
-                case 4:
-                    tree_unlock(flag_tree, tid, n_threads);
-                    break;
-                case 5:
-                    alagarsamy_unlock(TURN, Q, tid, l, n_threads);
-                    break;
-                }
+            if (shared_counter == 0) {
+                double lat = (time_2 - time_1) * 1e6;
+                printf("%f\n", lat);
             }
 
-            #pragma omp barrier
-            #pragma omp barrier
+            // increment counters for correctness check
+            shared_counter += 1;
+            local_counter  += 1;
+
+            /* End of critical section */
             
+            switch (which_lock)
+            {
+            case 1:
+                omp_unset_lock(&baseline);
+                break;
+            case 2:
+                filter_unlock(level, tid);
+                break;
+            case 3:
+                block_woo_unlock(competing, tid);
+                break;
+            case 4:
+                tree_unlock(flag_tree, tid, n_threads);
+                break;
+            case 5:
+                alagarsamy_unlock(TURN, Q, tid, l, n_threads);
+                break;
+            }
+
+
+            #pragma omp barrier
+            #pragma omp barrier
+           
             local_counter_arr[tid] = local_counter;
 
             #pragma omp barrier
@@ -193,14 +204,7 @@ int main(int argc, char **argv)
                 atomic_int sum_local_counters = sum_val(local_counter_arr, n_threads);
                 if (which_lock != 4) {
                     assert(shared_counter == sum_local_counters && "ERROR: Counter mismatch");
-                }
-
-                /* Print result to stdout.
-                One row per experiment repetition */
-                for (int i = 0; i < inner_iterations; i++) {
-                    printf("%d ", lock_acquisition_log[i]);
-                }
-                printf("\n");
+                }                
             }
         }
         omp_destroy_lock(&baseline);

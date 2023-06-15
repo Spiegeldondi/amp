@@ -1,10 +1,12 @@
 .PHONY: create_venv build create-folder small-bench small-plot
 SHELL:=/bin/bash
+OUTPUT_PATH := $(PWD)/output/done
 
 small-plot: small-bench
 	@echo -e "\nWaiting for slurm job to complete...\n"
+	@echo -e "...by looking for $(OUTPUT_PATH) to be generated...\n"
 	@SECONDS=0; \
-	while [ ! -f ./output/done ]; do \
+	while [ ! -f $(OUTPUT_PATH) ]; do \
         	echo -ne "Slurm job in progress... $$SECONDS seconds\r"; \
         	sleep 1; \
     	done

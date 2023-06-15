@@ -82,6 +82,8 @@ Makefile: First creates a python virtual environment and installs "numpy" and "m
 # How to run #
 ##############
 
+*** important ***
+
 From within the submission directory:
 
 >> make

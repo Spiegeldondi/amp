@@ -4,7 +4,7 @@ SHELL:=/bin/bash
 small-plot: small-bench
 	@echo -e "\nWaiting for slurm job to complete...\n"
 	@SECONDS=0; \
-	while [ ! -f /home/student/amp23s17/submission/output/done ]; do \
+	while [ ! -f ./output/done ]; do \
         	echo -ne "Slurm job in progress... $$SECONDS seconds\r"; \
         	sleep 1; \
     	done
